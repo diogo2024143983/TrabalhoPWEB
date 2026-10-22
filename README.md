@@ -35,10 +35,9 @@ Admin e API usam a **mesma** base de dados LocalDB `MyHotels`. O frontend públi
 ## Executar
 
 1. Abrir `MyHotels.slnx`
-2. Criar/atualizar a BD (ou deixar o arranque do Admin/API fazer `Migrate` + seed):
+2. Atualizar a BD (o arranque do Admin/API também executa `Migrate` + seed automaticamente):
 
 ```powershell
-dotnet ef migrations add InitialCreate --project src\MyHotels.Infrastructure --startup-project src\MyHotels.Api
 dotnet ef database update --project src\MyHotels.Infrastructure --startup-project src\MyHotels.Api
 ```
 
