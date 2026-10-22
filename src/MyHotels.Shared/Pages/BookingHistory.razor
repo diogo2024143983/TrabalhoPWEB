@@ -1,0 +1,63 @@
+@page "/minhas-reservas"
+@using MyHotels.Shared.Data.DTO
+@using MyHotels.Shared.Data.Services
+@inject BookingApiService Bookings
+@inject ITokenStore TokenStore
+
+<section class="mh-details">
+    <h1>As minhas reservas</h1>
+    @if (_loading)
+    {
+        <p>A carregar reservas...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="mh-error">@_message</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <p>Ainda não existem reservas.</p>
+    }
+    else
+    {
+        @foreach (var booking in _items)
+        {
+            <article class="mh-card">
+                <h2>Reserva #@booking.Id</h2>
+                <p>@booking.CheckIn.ToString("dd/MM/yyyy") - @booking.CheckOut.ToString("dd/MM/yyyy")</p>
+                <p>Estado: <strong>@booking.Status</strong></p>
+                <p>Total: <strong>@booking.Total.ToString("C")</strong></p>
+                <p>@(booking.DocumentsExpedited ? "Documentos expedidos." : "Documentos em preparação.")</p>
+            </article>
+        }
+    }
+</section>
+
+@code {
+    private IReadOnlyList<BookingSummaryDto> _items = [];
+    private string? _message;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(await TokenStore.GetAsync()))
+        {
+            _message = "Inicie sessão para consultar o histórico.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _items = await Bookings.GetMineAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _message = "Não foi possível carregar o histórico de reservas.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

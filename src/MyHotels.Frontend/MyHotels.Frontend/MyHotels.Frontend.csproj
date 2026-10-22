@@ -7,11 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MyHotels.Frontend.Client\MyHotels.Frontend.Client.csproj" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="8.0.31" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\MyHotels.Domain\MyHotels.Domain.csproj" />
     <ProjectReference Include="..\..\MyHotels.Shared\MyHotels.Shared.csproj" />
   </ItemGroup>

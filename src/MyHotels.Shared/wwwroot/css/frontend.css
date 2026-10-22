@@ -1,0 +1,170 @@
+:root {
+    --mh-brand: #0b3d4a;
+    --mh-accent: #148f7a;
+    --mh-sand: #f4efe6;
+    --mh-ink: #16323d;
+    --mh-card: #ffffff;
+}
+
+.mh-hero {
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.5rem;
+    background:
+        linear-gradient(120deg, rgba(11, 61, 74, 0.92), rgba(20, 143, 122, 0.78)),
+        radial-gradient(circle at top right, #7dd3c7, transparent 45%);
+    color: #fff;
+    border-radius: 0 0 1.25rem 1.25rem;
+}
+
+.mh-brand {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.35rem;
+}
+
+.mh-hero h1 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(1.6rem, 3vw, 2.4rem);
+}
+
+.mh-featured {
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 1rem;
+    padding: 1rem;
+}
+
+.mh-strip {
+    padding: 1.25rem 1.5rem 0.5rem;
+}
+
+.mh-strip-header h2 {
+    margin: 0;
+    color: var(--mh-brand);
+}
+
+.mh-strip-header p {
+    margin: 0.25rem 0 0.85rem;
+    color: #486581;
+}
+
+.mh-rail {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.75rem;
+}
+
+.mh-chip {
+    border: 1px solid #d9e2ec;
+    background: var(--mh-card);
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    text-align: left;
+    cursor: pointer;
+    color: var(--mh-ink);
+    min-width: 140px;
+}
+
+.mh-chip span {
+    display: block;
+    font-size: 0.85rem;
+    color: #627d98;
+}
+
+.mh-chip.active {
+    background: var(--mh-brand);
+    border-color: var(--mh-brand);
+    color: #fff;
+}
+
+.mh-chip.active span {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.mh-products {
+    grid-auto-columns: minmax(220px, 260px);
+}
+
+.mh-card {
+    background: var(--mh-card);
+    border: 1px solid #d9e2ec;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(16, 42, 67, 0.06);
+}
+
+.mh-card-body {
+    padding: 1rem;
+}
+
+.mh-card-body h3 {
+    margin: 0 0 0.35rem;
+}
+
+.mh-price {
+    font-weight: 700;
+    color: var(--mh-accent);
+}
+
+.mh-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    align-items: center;
+}
+
+.mh-btn {
+    border: none;
+    background: var(--mh-accent);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.55rem 1rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.mh-btn.secondary {
+    background: #fff;
+    color: var(--mh-brand);
+    border: 1px solid #bcccdc;
+}
+
+.mh-details {
+    padding: 1.5rem;
+}
+
+.mh-meta {
+    color: #486581;
+}
+
+.mh-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+.mh-table th,
+.mh-table td {
+    border-bottom: 1px solid #d9e2ec;
+    padding: 0.65rem 0.4rem;
+    text-align: left;
+}
+
+.mh-error {
+    color: #b91c1c;
+    padding: 0 1.5rem 1.5rem;
+}
+
+@media (min-width: 900px) {
+    .mh-hero {
+        grid-template-columns: 1.4fr 0.8fr;
+        align-items: end;
+        min-height: 280px;
+    }
+}

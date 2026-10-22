@@ -1,0 +1,119 @@
+@page "/reservas"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Entities
+@using MyHotels.Infrastructure.Data
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Reservas</PageTitle>
+<h1>Gestão de reservas</h1>
+
+<div class="toolbar">
+    <select @bind="_statusFilter">
+        <option value="">Todos os estados</option>
+        @foreach (BookingStatus status in Enum.GetValues<BookingStatus>())
+        {
+            <option value="@status">@status</option>
+        }
+    </select>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Cliente</th>
+            <th>Check-in</th>
+            <th>Check-out</th>
+            <th>Total</th>
+            <th>Estado</th>
+            <th>Documentos</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var booking in Filtered())
+        {
+            <tr>
+                <td>@booking.Id</td>
+                <td>@booking.CustomerId</td>
+                <td>@booking.CheckIn</td>
+                <td>@booking.CheckOut</td>
+                <td>@booking.Total.ToString("C")</td>
+                <td>@booking.Status</td>
+                <td>@(booking.DocumentsExpedited ? "Expedidos" : "Por expedir")</td>
+                <td class="actions">
+                    <button class="btn" disabled="@(booking.Status is not (BookingStatus.Pending or BookingStatus.Paid))" @onclick="() => UpdateStatusAsync(booking, BookingStatus.Confirmed)">Confirmar</button>
+                    <button class="btn" disabled="@(booking.Status != BookingStatus.Pending)" @onclick="() => UpdateStatusAsync(booking, BookingStatus.Rejected)">Rejeitar</button>
+                    <button class="btn" disabled="@(booking.Status != BookingStatus.Confirmed)" @onclick="() => UpdateStatusAsync(booking, BookingStatus.Paid)">Simular pagamento</button>
+                    <button class="btn" disabled="@(booking.Status is not (BookingStatus.Confirmed or BookingStatus.Paid))" @onclick="() => ExpediteAsync(booking)">Expedir documentos</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<Booking> _items = [];
+    private string _statusFilter = string.Empty;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _items = await Db.Bookings
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ToListAsync();
+
+    private IEnumerable<Booking> Filtered()
+    {
+        if (string.IsNullOrWhiteSpace(_statusFilter) || !Enum.TryParse<BookingStatus>(_statusFilter, out var status))
+        {
+            return _items;
+        }
+
+        return _items.Where(x => x.Status == status);
+    }
+
+    private async Task UpdateStatusAsync(Booking booking, BookingStatus status)
+    {
+        var entity = await Db.Bookings.Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == booking.Id);
+        if (entity is null) return;
+
+        var previousStatus = entity.Status;
+        entity.Status = status;
+        if (status == BookingStatus.Confirmed && previousStatus == BookingStatus.Pending && !entity.StockUpdated)
+        {
+            foreach (var item in entity.Items)
+            {
+                var accommodation = await Db.Accommodations.FindAsync(item.AccommodationId);
+                if (accommodation is null) continue;
+                accommodation.Stock = Math.Max(0, accommodation.Stock - item.Quantity);
+            }
+
+            entity.StockUpdated = true;
+        }
+
+        await Db.SaveChangesAsync();
+        _message = $"Reserva {booking.Id} atualizada para {status}.";
+        await ReloadAsync();
+    }
+
+    private async Task ExpediteAsync(Booking booking)
+    {
+        var entity = await Db.Bookings.FindAsync(booking.Id);
+        if (entity is null) return;
+        entity.DocumentsExpedited = true;
+        await Db.SaveChangesAsync();
+        _message = $"Documentos da reserva {booking.Id} marcados como expedidos (simulação).";
+        await ReloadAsync();
+    }
+}

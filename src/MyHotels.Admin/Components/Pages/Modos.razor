@@ -1,0 +1,135 @@
+@page "/modos"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Entities
+@using MyHotels.Infrastructure.Data
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Modos de disponibilização</PageTitle>
+<h1>Modos de disponibilização</h1>
+
+<div class="toolbar">
+    <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
+    <button class="btn btn-primary" @onclick="StartCreate">Novo modo</button>
+</div>
+
+@if (_editing is not null)
+{
+    <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="modo-form">
+        <div class="form-group">
+            <label>Nome</label>
+            <InputText @bind-Value="_editing.Name" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Descrição</label>
+            <InputTextArea @bind-Value="_editing.Description" class="form-control" />
+        </div>
+        <label><InputCheckbox @bind-Value="_editing.IsActive" /> Ativo</label>
+        <div class="toolbar">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn" @onclick="() => _editing = null">Cancelar</button>
+        </div>
+    </EditForm>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Descrição</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Filtered())
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Description</td>
+                <td>@(item.IsActive ? "Ativo" : "Inativo")</td>
+                <td class="actions">
+                    <button class="btn" @onclick="() => StartEdit(item)">Editar</button>
+                    <button class="btn" @onclick="() => ToggleActiveAsync(item)">@(item.IsActive ? "Inativar" : "Ativar")</button>
+                    <button class="btn btn-danger" @onclick="() => DeleteAsync(item)">Apagar</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<AvailabilityMode> _items = [];
+    private AvailabilityMode? _editing;
+    private string _search = string.Empty;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _items = await Db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+
+    private IEnumerable<AvailabilityMode> Filtered() =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _items
+            : _items.Where(x => x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private void StartCreate() => _editing = new AvailabilityMode { Name = string.Empty, IsActive = true };
+
+    private void StartEdit(AvailabilityMode item) =>
+        _editing = new AvailabilityMode
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Description = item.Description,
+            IsActive = item.IsActive
+        };
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _message = "O nome é obrigatório.";
+            return;
+        }
+
+        if (_editing.Id == 0) Db.AvailabilityModes.Add(_editing);
+        else Db.AvailabilityModes.Update(_editing);
+
+        await Db.SaveChangesAsync();
+        _editing = null;
+        _message = "Modo guardado.";
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(AvailabilityMode item)
+    {
+        var entity = await Db.AvailabilityModes.FindAsync(item.Id);
+        if (entity is null) return;
+        entity.IsActive = !entity.IsActive;
+        await Db.SaveChangesAsync();
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(AvailabilityMode item)
+    {
+        if (await Db.Accommodations.AnyAsync(x => x.AvailabilityModeId == item.Id))
+        {
+            _message = "Não é possível apagar: existem alojamentos associados.";
+            return;
+        }
+
+        var entity = await Db.AvailabilityModes.FindAsync(item.Id);
+        if (entity is null) return;
+        Db.AvailabilityModes.Remove(entity);
+        await Db.SaveChangesAsync();
+        _message = "Modo apagado.";
+        await ReloadAsync();
+    }
+}

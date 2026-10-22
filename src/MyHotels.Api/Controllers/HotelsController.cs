@@ -23,7 +23,8 @@ public sealed class HotelsController(ApplicationDbContext db) : ControllerBase
                 hotel.Name,
                 hotel.City,
                 hotel.Description,
-                hotel.Stars
+                hotel.Stars,
+                hotel.ImagePath
             })
             .ToListAsync(cancellationToken);
 

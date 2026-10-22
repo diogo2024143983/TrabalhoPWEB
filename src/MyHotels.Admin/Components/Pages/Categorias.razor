@@ -1,0 +1,165 @@
+@page "/categorias"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Entities
+@using MyHotels.Infrastructure.Data
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Categorias</PageTitle>
+<h1>Categorias de alojamento</h1>
+
+<div class="toolbar">
+    <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
+    <button class="btn btn-primary" @onclick="StartCreate">Nova categoria</button>
+</div>
+
+@if (_editing is not null)
+{
+    <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="categoria-form">
+        <DataAnnotationsValidator />
+        <div class="form-group">
+            <label>Nome</label>
+            <InputText @bind-Value="_editing.Name" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Descrição</label>
+            <InputTextArea @bind-Value="_editing.Description" class="form-control" />
+        </div>
+        <label><InputCheckbox @bind-Value="_editing.IsActive" /> Ativa</label>
+        <div class="toolbar">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn" @onclick="CancelEdit">Cancelar</button>
+        </div>
+    </EditForm>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th><button class="link-btn" @onclick='() => SortBy("name")'>Nome</button></th>
+            <th>Descrição</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Filtered())
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Description</td>
+                <td>@(item.IsActive ? "Ativa" : "Inativa")</td>
+                <td class="actions">
+                    <button class="btn" @onclick="() => StartEdit(item)">Editar</button>
+                    <button class="btn" @onclick="() => ToggleActiveAsync(item)">@(item.IsActive ? "Inativar" : "Ativar")</button>
+                    <button class="btn btn-danger" @onclick="() => DeleteAsync(item)">Apagar</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<AccommodationCategory> _items = [];
+    private AccommodationCategory? _editing;
+    private string _search = string.Empty;
+    private string _sort = "name";
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _items = await Db.AccommodationCategories.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+    }
+
+    private IEnumerable<AccommodationCategory> Filtered()
+    {
+        var query = _items.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            query = query.Where(x => x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return _sort == "name"
+            ? query.OrderBy(x => x.Name)
+            : query.OrderByDescending(x => x.Name);
+    }
+
+    private void SortBy(string field) => _sort = field;
+
+    private void StartCreate()
+    {
+        _editing = new AccommodationCategory { Name = string.Empty, IsActive = true };
+        _message = null;
+    }
+
+    private void StartEdit(AccommodationCategory item)
+    {
+        _editing = new AccommodationCategory
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Description = item.Description,
+            IsActive = item.IsActive
+        };
+        _message = null;
+    }
+
+    private void CancelEdit() => _editing = null;
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _message = "O nome é obrigatório.";
+            return;
+        }
+
+        if (_editing.Id == 0)
+        {
+            Db.AccommodationCategories.Add(_editing);
+        }
+        else
+        {
+            Db.AccommodationCategories.Update(_editing);
+        }
+
+        await Db.SaveChangesAsync();
+        _editing = null;
+        _message = "Categoria guardada.";
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(AccommodationCategory item)
+    {
+        var entity = await Db.AccommodationCategories.FindAsync(item.Id);
+        if (entity is null) return;
+        entity.IsActive = !entity.IsActive;
+        await Db.SaveChangesAsync();
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(AccommodationCategory item)
+    {
+        var inUse = await Db.Accommodations.AnyAsync(x => x.CategoryId == item.Id);
+        if (inUse)
+        {
+            _message = "Não é possível apagar: existem alojamentos associados.";
+            return;
+        }
+
+        var entity = await Db.AccommodationCategories.FindAsync(item.Id);
+        if (entity is null) return;
+        Db.AccommodationCategories.Remove(entity);
+        await Db.SaveChangesAsync();
+        _message = "Categoria apagada.";
+        await ReloadAsync();
+    }
+}

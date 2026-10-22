@@ -1,0 +1,111 @@
+@using MyHotels.Shared.Data.Services
+@using MyHotels.Shared.Data.DTO
+@inject CartState Cart
+@inject NavigationManager Navigation
+@inject BookingApiService Bookings
+@inject ITokenStore TokenStore
+@implements IDisposable
+
+<section class="mh-details">
+    <h1>Reserva provisória</h1>
+    <p>Pode selecionar produtos como anónimo. Para efetivar e pagar, autentique-se como Cliente.</p>
+
+    @if (Cart.Items.Count == 0)
+    {
+        <p>O carrinho está vazio.</p>
+    }
+    else
+    {
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Check-in</label>
+                <InputDate @bind-Value="_checkIn" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Check-out</label>
+                <InputDate @bind-Value="_checkOut" class="form-control" />
+            </div>
+        </div>
+        <table class="mh-table">
+            <thead>
+                <tr>
+                    <th>Alojamento</th>
+                    <th>Hotel</th>
+                    <th>Qtd</th>
+                    <th>Preço</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Cart.Items)
+                {
+                    <tr>
+                        <td>@item.Name</td>
+                        <td>@item.HotelName</td>
+                        <td>
+                            <button class="mh-btn secondary" @onclick="() => Cart.SetQuantity(item.AccommodationId, item.Quantity - 1)">-</button>
+                            @item.Quantity
+                            <button class="mh-btn secondary" @onclick="() => Cart.SetQuantity(item.AccommodationId, item.Quantity + 1)">+</button>
+                        </td>
+                        <td>@((item.UnitPrice * item.Quantity).ToString("C"))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="mh-card-actions">
+            <button class="mh-btn secondary" @onclick="Cart.Clear">Limpar</button>
+            <button class="mh-btn" @onclick="CheckoutAsync">Encomendar e pagar</button>
+            <button class="mh-btn secondary" @onclick="GoLogin">Login / registo</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p class="mh-error">@_message</p>
+        }
+    }
+</section>
+
+@code {
+    private DateOnly _checkIn = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private DateOnly _checkOut = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+    private string? _message;
+
+    protected override void OnInitialized() => Cart.Changed += OnChanged;
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    private void GoLogin() => Navigation.NavigateTo("/conta/login");
+    private async Task CheckoutAsync()
+    {
+        _message = null;
+        var token = await TokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Navigation.NavigateTo("/conta/login?returnUrl=/carrinho");
+            return;
+        }
+
+        if (_checkOut <= _checkIn)
+        {
+            _message = "A data de saída deve ser posterior à data de entrada.";
+            return;
+        }
+
+        var bookingId = await Bookings.CreateBookingAsync(new CreateBookingRequest(
+            _checkIn,
+            _checkOut,
+            Cart.Items.Select(item => new BookingItemRequest(item.AccommodationId, item.Quantity)).ToList()));
+        if (bookingId is null)
+        {
+            _message = "Não foi possível criar a reserva. Verifique a disponibilidade.";
+            return;
+        }
+
+        if (!await Bookings.PayAsync(bookingId.Value))
+        {
+            _message = $"A reserva {bookingId} foi criada, mas o pagamento não foi concluído.";
+            return;
+        }
+
+        Cart.Clear();
+        Navigation.NavigateTo("/minhas-reservas");
+    }
+    public void Dispose() => Cart.Changed -= OnChanged;
+}

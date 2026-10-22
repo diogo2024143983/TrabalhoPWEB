@@ -5,9 +5,9 @@
     <Project Path="src/MyHotels.Domain/MyHotels.Domain.csproj" />
     <Project Path="src/MyHotels.Infrastructure/MyHotels.Infrastructure.csproj" />
     <Project Path="src/MyHotels.Shared/MyHotels.Shared.csproj" />
+    <Project Path="src/MyHotels.Maui/MyHotels.Maui.csproj" />
   </Folder>
   <Folder Name="/src/MyHotels.Frontend/">
-    <Project Path="src/MyHotels.Frontend/MyHotels.Frontend.Client/MyHotels.Frontend.Client.csproj" />
     <Project Path="src/MyHotels.Frontend/MyHotels.Frontend/MyHotels.Frontend.csproj" />
   </Folder>
 </Solution>

@@ -1,30 +1,63 @@
 # MyHotels
 
-Base do trabalho prático de Programação Web 2026/2027.
+Trabalho prático de Programação Web 2026/2027 — cadeia de hotéis e aparthotéis.
 
-## Estrutura
+## Arquitetura
 
-- `MyHotels.Domain`: entidades e regras de domínio partilhadas.
-- `MyHotels.Infrastructure`: Entity Framework Core, SQL Server LocalDB e ASP.NET Core Identity.
-- `MyHotels.Shared`: Razor Class Library para componentes e estilos reutilizáveis.
-- `MyHotels.Frontend`: frontend público Blazor Web App (com projeto Client para o modo WebAssembly).
-- `MyHotels.Admin`: aplicação de gestão para funcionários e administradores.
-- `MyHotels.Api`: API REST com Swagger para consumo controlado pelo frontend.
+| Projeto | Função |
+|---------|--------|
+| `MyHotels.Domain` | Entidades e roles de domínio |
+| `MyHotels.Infrastructure` | EF Core, Identity, LocalDB, seed (`Inicializacao`) |
+| `MyHotels.Shared` | RCL partilhada (UI + DTOs + serviços HTTP) |
+| `MyHotels.Frontend` | Frontend Web Blazor (consome a API) |
+| `MyHotels.Maui` | Frontend Hybrid (mesmo código RCL; Windows/Android/iOS/…) |
+| `MyHotels.Admin` | Gestão de alojamentos (acesso direto à BD) |
+| `MyHotels.Api` | API REST + Swagger + JWT |
 
-## Requisitos locais
+Admin e API usam a **mesma** base de dados LocalDB `MyHotels`. O frontend público fala **só** com a API (JWT).
 
-- Visual Studio 2022 com ASP.NET and web development e .NET 8.
-- SQL Server LocalDB.
+## Requisitos
+
+- Visual Studio 2022 + workloads ASP.NET, .NET MAUI
+- .NET 8 (Admin/API/Frontend/Shared/Domain/Infrastructure)
+- SQL Server LocalDB
+- O projeto MAUI usa `net8.0-*`, conforme as fichas laboratoriais
+
+## Credenciais de demonstração (seed)
+
+| Perfil | Email | Password |
+|--------|-------|----------|
+| Administrador | `admin@myhotels.local` | `Admin#2026!` |
+| Funcionário | `funcionario@myhotels.local` | `Staff#2026!` |
+| Cliente | `cliente@myhotels.local` | `Cliente#2026!` |
+| Fornecedor | `fornecedor@myhotels.local` | `Fornecedor#2026!` |
 
 ## Executar
 
-1. Abrir `MyHotels.slnx` no Visual Studio.
-2. Configurar os projetos `MyHotels.Api`, `MyHotels.Admin` e `MyHotels.Frontend` como projetos de arranque.
-3. Criar a base de dados através das migrations do projeto `MyHotels.Infrastructure`:
+1. Abrir `MyHotels.slnx`
+2. Criar/atualizar a BD (ou deixar o arranque do Admin/API fazer `Migrate` + seed):
 
 ```powershell
 dotnet ef migrations add InitialCreate --project src\MyHotels.Infrastructure --startup-project src\MyHotels.Api
 dotnet ef database update --project src\MyHotels.Infrastructure --startup-project src\MyHotels.Api
 ```
 
-O trabalho usa a connection string `MyHotels` em `appsettings.json`. As credenciais, dados de demonstração, regras de negócio e o MER devem ser documentados no relatório final.
+3. Arrancar em simultâneo: `MyHotels.Api`, `MyHotels.Admin`, `MyHotels.Frontend`
+4. Swagger: `https://localhost:7280/swagger`
+5. Para MAUI ↔ API em device/emulador, criar um **Dev Tunnel** para a API e definir a URL:
+
+```powershell
+$env:MYHOTELS_API_URL = "https://<tunnel>.devtunnels.ms/"
+```
+
+O frontend Web usa `ApiBaseUrl` em `src\MyHotels.Frontend\MyHotels.Frontend\appsettings.json`.
+
+O fluxo público completo é: consultar oferta sem login, criar conta de Cliente,
+aguardar ativação no Admin, iniciar sessão, selecionar alojamentos do mesmo hotel,
+criar a reserva, simular pagamento e consultar o histórico em `minhas-reservas`.
+
+## Alinhamento com as fichas
+
+- Ficha 2: RCL partilhada + Blazor Web + Blazor Hybrid (MAUI)
+- Fichas 3–5: Admin com Identity, entidades, migrations, seed, NavMenu e CRUD (categorias, modos, alojamentos/hotéis)
+- Enunciado TP: API JWT, roles, gestão de reservas/clientes, frontend com frisos de hotéis/categorias/alojamentos

@@ -1,0 +1,63 @@
+@page "/conta/registo"
+@using System.ComponentModel.DataAnnotations
+@using MyHotels.Shared.Data.DTO
+@inject BookingApiService Bookings
+@inject NavigationManager Navigation
+
+<PageTitle>Registo de cliente</PageTitle>
+
+<section class="mh-details">
+    <h1>Registo de cliente</h1>
+    <p>A conta fica pendente até ser ativada por um funcionário.</p>
+    <EditForm Model="_model" OnValidSubmit="RegisterAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="form-grid">
+            <div class="form-group"><label>Nome</label><InputText @bind-Value="_model.FirstName" class="form-control" /></div>
+            <div class="form-group"><label>Apelido</label><InputText @bind-Value="_model.LastName" class="form-control" /></div>
+            <div class="form-group"><label>Email</label><InputText @bind-Value="_model.Email" class="form-control" /></div>
+            <div class="form-group"><label>Password</label><InputText type="password" @bind-Value="_model.Password" class="form-control" /></div>
+            <div class="form-group"><label>NIF</label><InputText @bind-Value="_model.Nif" class="form-control" /></div>
+            <div class="form-group"><label>Morada</label><InputText @bind-Value="_model.Address" class="form-control" /></div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p class="mh-error">@_message</p>
+        }
+        <button class="mh-btn" type="submit">Registar</button>
+    </EditForm>
+</section>
+
+@code {
+    private readonly RegisterModel _model = new();
+    private string? _message;
+
+    private async Task RegisterAsync()
+    {
+        var success = await Bookings.RegisterAsync(new RegisterCustomerRequest(
+            _model.Email,
+            _model.Password,
+            _model.FirstName,
+            _model.LastName,
+            _model.Nif,
+            _model.Address));
+
+        if (!success)
+        {
+            _message = "Não foi possível concluir o registo. Verifique os dados.";
+            return;
+        }
+
+        Navigation.NavigateTo("/conta/login");
+    }
+
+    private sealed class RegisterModel
+    {
+        [Required, EmailAddress] public string Email { get; set; } = string.Empty;
+        [Required, MinLength(8)] public string Password { get; set; } = string.Empty;
+        [Required] public string FirstName { get; set; } = string.Empty;
+        [Required] public string LastName { get; set; } = string.Empty;
+        public string? Nif { get; set; }
+        public string? Address { get; set; }
+    }
+}

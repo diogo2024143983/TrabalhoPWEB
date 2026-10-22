@@ -1,0 +1,58 @@
+@page "/conta/login"
+@using System.ComponentModel.DataAnnotations
+@using MyHotels.Shared.Data.DTO
+@inject BookingApiService Bookings
+@inject ITokenStore TokenStore
+@inject NavigationManager Navigation
+
+<PageTitle>Login de Cliente</PageTitle>
+
+<section class="mh-details">
+    <h1>Login de Cliente</h1>
+    <p>Autenticação via API com JWT. Necessária para efetivar reservas.</p>
+    <EditForm Model="_model" OnValidSubmit="LoginAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="form-group">
+            <label>Email</label>
+            <InputText @bind-Value="_model.Email" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <InputText type="password" @bind-Value="_model.Password" class="form-control" />
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p class="mh-error">@_message</p>
+        }
+        <button class="mh-btn" type="submit">Entrar</button>
+        <a class="mh-btn secondary" href="/conta/registo">Criar conta</a>
+    </EditForm>
+</section>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private readonly LoginModel _model = new();
+    private string? _message;
+
+    private async Task LoginAsync()
+    {
+        var response = await Bookings.LoginAsync(new LoginRequest(_model.Email, _model.Password));
+        if (response is null)
+        {
+            _message = "Login falhou. Verifique credenciais ou se a conta está ativa.";
+            return;
+        }
+
+        await TokenStore.SetAsync(response.Token);
+        Navigation.NavigateTo(string.IsNullOrWhiteSpace(ReturnUrl) ? "/carrinho" : ReturnUrl);
+    }
+
+    private sealed class LoginModel
+    {
+        [Required, EmailAddress] public string Email { get; set; } = string.Empty;
+        [Required] public string Password { get; set; } = string.Empty;
+    }
+}

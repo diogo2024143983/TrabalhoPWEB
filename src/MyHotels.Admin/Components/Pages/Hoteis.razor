@@ -1,0 +1,155 @@
+@page "/hoteis"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Entities
+@using MyHotels.Infrastructure.Data
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Hotéis</PageTitle>
+<h1>Hotéis e aparthotéis</h1>
+
+<div class="toolbar">
+    <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome ou cidade" />
+    <button class="btn btn-primary" @onclick="StartCreate">Novo hotel</button>
+</div>
+
+@if (_editing is not null)
+{
+    <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="hotel-form">
+        <div class="form-group">
+            <label>Nome</label>
+            <InputText @bind-Value="_editing.Name" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Cidade</label>
+            <InputText @bind-Value="_editing.City" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Descrição</label>
+            <InputTextArea @bind-Value="_editing.Description" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Estrelas</label>
+            <InputNumber @bind-Value="_editing.Stars" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Imagem</label>
+            <InputText @bind-Value="_editing.ImagePath" class="form-control" />
+        </div>
+        <label><InputCheckbox @bind-Value="_editing.IsActive" /> Ativo</label>
+        <div class="toolbar">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn" @onclick="() => _editing = null">Cancelar</button>
+        </div>
+    </EditForm>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Cidade</th>
+            <th>Estrelas</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Filtered())
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.City</td>
+                <td>@item.Stars</td>
+                <td>@(item.IsActive ? "Ativo" : "Inativo")</td>
+                <td class="actions">
+                    <button class="btn" @onclick="() => StartEdit(item)">Editar</button>
+                    <button class="btn" @onclick="() => ToggleActiveAsync(item)">@(item.IsActive ? "Inativar" : "Ativar")</button>
+                    <button class="btn btn-danger" @onclick="() => DeleteAsync(item)">Apagar</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<Hotel> _items = [];
+    private Hotel? _editing;
+    private string _search = string.Empty;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _items = await Db.Hotels.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+
+    private IEnumerable<Hotel> Filtered() =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _items
+            : _items.Where(x =>
+                x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || x.City.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private void StartCreate() =>
+        _editing = new Hotel { Name = string.Empty, City = string.Empty, Stars = 3, IsActive = true };
+
+    private void StartEdit(Hotel item) =>
+        _editing = new Hotel
+        {
+            Id = item.Id,
+            Name = item.Name,
+            City = item.City,
+            Description = item.Description,
+            Stars = item.Stars,
+            ImagePath = item.ImagePath,
+            IsActive = item.IsActive
+        };
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name) || string.IsNullOrWhiteSpace(_editing.City))
+        {
+            _message = "Nome e cidade são obrigatórios.";
+            return;
+        }
+
+        if (_editing.Id == 0) Db.Hotels.Add(_editing);
+        else Db.Hotels.Update(_editing);
+
+        await Db.SaveChangesAsync();
+        _editing = null;
+        _message = "Hotel guardado.";
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(Hotel item)
+    {
+        var entity = await Db.Hotels.FindAsync(item.Id);
+        if (entity is null) return;
+        entity.IsActive = !entity.IsActive;
+        await Db.SaveChangesAsync();
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(Hotel item)
+    {
+        if (await Db.Accommodations.AnyAsync(x => x.HotelId == item.Id))
+        {
+            _message = "Não é possível apagar: existem alojamentos associados.";
+            return;
+        }
+
+        var entity = await Db.Hotels.FindAsync(item.Id);
+        if (entity is null) return;
+        Db.Hotels.Remove(entity);
+        await Db.SaveChangesAsync();
+        _message = "Hotel apagado.";
+        await ReloadAsync();
+    }
+}

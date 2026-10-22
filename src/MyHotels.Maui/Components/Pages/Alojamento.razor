@@ -1,0 +1,9 @@
+@page "/alojamento/{Id:int}"
+@using MyHotels.Shared.Pages
+
+<AccommodationDetails Id="Id" />
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+}

@@ -1,7 +1,19 @@
 ﻿@page "/"
+@attribute [Authorize(Policy = "Staff")]
 
-<PageTitle>Home</PageTitle>
+<PageTitle>MyHotels Admin</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Gestão de Alojamentos</h1>
+<p>
+    Área reservada a administradores e funcionários da cadeia MyHotels.
+    Utilize o menu para gerir hotéis, categorias, modos de disponibilização, alojamentos e reservas.
+</p>
 
-Welcome to your new app.
+<div class="admin-home-grid">
+    <a class="admin-home-card" href="hoteis">Hotéis</a>
+    <a class="admin-home-card" href="categorias">Categorias</a>
+    <a class="admin-home-card" href="modos">Modos</a>
+    <a class="admin-home-card" href="alojamentos">Alojamentos</a>
+    <a class="admin-home-card" href="reservas">Reservas</a>
+    <a class="admin-home-card" href="clientes">Clientes</a>
+</div>

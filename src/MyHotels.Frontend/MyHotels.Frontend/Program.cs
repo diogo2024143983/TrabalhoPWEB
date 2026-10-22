@@ -1,32 +1,46 @@
 using MyHotels.Frontend.Components;
+using MyHotels.Shared.Data.Interfaces;
+using MyHotels.Shared.Data.Services;
+using MyHotels.Shared.Pages;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveWebAssemblyComponents();
+    .AddInteractiveServerComponents();
+
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
+    ?? "https://localhost:7280/";
+
+builder.Services.AddScoped<CartState>();
+builder.Services.AddScoped<ITokenStore, BrowserTokenStore>();
+builder.Services.AddTransient<JwtAuthorizationHandler>();
+builder.Services.AddHttpClient<ICatalogApi, CatalogApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+});
+builder.Services.AddHttpClient<BookingApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+}).AddHttpMessageHandler<JwtAuthorizationHandler>();
+builder.Services.AddHttpClient("MyHotels.Api", client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+}).AddHttpMessageHandler<JwtAuthorizationHandler>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseWebAssemblyDebugging();
-}
-else
+if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
 app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveWebAssemblyRenderMode()
-    .AddAdditionalAssemblies(typeof(MyHotels.Frontend.Client._Imports).Assembly);
+    .AddInteractiveServerRenderMode()
+    .AddAdditionalAssemblies(typeof(CatalogHome).Assembly);
 
 app.Run();

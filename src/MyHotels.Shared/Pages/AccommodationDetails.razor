@@ -1,0 +1,61 @@
+@using MyHotels.Shared.Data.DTO
+@using MyHotels.Shared.Data.Interfaces
+@using MyHotels.Shared.Data.Services
+@inject ICatalogApi CatalogApi
+@inject CartState Cart
+@inject NavigationManager Navigation
+
+@if (_item is null)
+{
+    <p>A carregar alojamento...</p>
+}
+else
+{
+    <section class="mh-details">
+        <button class="mh-btn secondary" @onclick="GoHome">Voltar</button>
+        <h1>@_item.Name</h1>
+        <p class="mh-meta">@_item.HotelName · @_item.City · @_item.Stars★ · @_item.CategoryName</p>
+        <p>@_item.Description</p>
+        <p>Capacidade: @_item.Capacity · Modo: @_item.AvailabilityMode</p>
+        <p class="mh-price">@_item.FinalPrice.ToString("C") / noite</p>
+
+        @if (_item.IsAvailableForBooking)
+        {
+            <div class="mh-card-actions">
+                <label>
+                    Quantidade
+                    <input type="number" min="1" max="@_item.Stock" @bind="_quantity" />
+                </label>
+                <button class="mh-btn" @onclick="AddToCart">Adicionar à reserva</button>
+            </div>
+            <p>Nota: a efetivação da reserva e pagamento requerem login como Cliente.</p>
+        }
+        else
+        {
+            <p>Este alojamento está apenas em listagem e não pode ser reservado online.</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private AccommodationDto? _item;
+    private int _quantity = 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _item = await CatalogApi.GetAccommodationAsync(Id);
+        _quantity = 1;
+    }
+
+    private void GoHome() => Navigation.NavigateTo("/");
+
+    private void AddToCart()
+    {
+        if (_item is null) return;
+        Cart.Add(_item, _quantity);
+        Navigation.NavigateTo("/carrinho");
+    }
+}

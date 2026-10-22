@@ -1,0 +1,68 @@
+@page "/fornecedores"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.AspNetCore.Identity
+@using MyHotels.Domain.Identity
+@using MyHotels.Infrastructure.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Fornecedores</PageTitle>
+<h1>Gestão de fornecedores</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr><th>Nome</th><th>Email</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var supplier in _suppliers)
+        {
+            <tr>
+                <td>@supplier.DisplayName</td>
+                <td>@supplier.Email</td>
+                <td>@(supplier.IsActive ? "Ativo" : "Inativo")</td>
+                <td>
+                    <button class="btn" @onclick="() => ToggleActiveAsync(supplier)">
+                        @(supplier.IsActive ? "Inativar" : "Ativar")
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ApplicationUser> _suppliers = [];
+    private string? _currentUserId;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = UserManager.GetUserId(state.User);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync() =>
+        _suppliers = (await UserManager.GetUsersInRoleAsync(AppRoles.Fornecedor))
+            .OrderBy(user => user.Email)
+            .ToList();
+
+    private async Task ToggleActiveAsync(ApplicationUser supplier)
+    {
+        if (supplier.Id == _currentUserId)
+        {
+            _message = "Não pode desativar o seu próprio registo.";
+            return;
+        }
+
+        supplier.IsActive = !supplier.IsActive;
+        await UserManager.UpdateAsync(supplier);
+        await ReloadAsync();
+    }
+}

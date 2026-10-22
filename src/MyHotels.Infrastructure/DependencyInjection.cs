@@ -13,19 +13,35 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("MyHotels")
-            ?? throw new InvalidOperationException("Connection string 'MyHotels' was not configured.");
+        var connectionString = configuration.GetConnectionString(AppConfig.ConnectionStringName)
+            ?? throw new InvalidOperationException($"Connection string '{AppConfig.ConnectionStringName}' was not configured.");
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString));
-        services.AddIdentityCore<ApplicationUser>(options =>
-            {
-                options.User.RequireUniqueEmail = true;
-                options.Password.RequiredLength = 8;
-            })
-            .AddRoles<IdentityRole>()
-            .AddEntityFrameworkStores<ApplicationDbContext>();
 
         return services;
+    }
+
+    public static IdentityBuilder AddMyHotelsIdentityCore(this IServiceCollection services)
+    {
+        return services.AddIdentityCore<ApplicationUser>(ConfigureIdentity)
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddSignInManager()
+            .AddDefaultTokenProviders();
+    }
+
+    public static IdentityBuilder AddMyHotelsIdentity(this IServiceCollection services)
+    {
+        return services.AddIdentity<ApplicationUser, IdentityRole>(ConfigureIdentity)
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
+    }
+
+    private static void ConfigureIdentity(IdentityOptions options)
+    {
+        options.User.RequireUniqueEmail = true;
+        options.Password.RequiredLength = 8;
+        options.SignIn.RequireConfirmedAccount = false;
     }
 }

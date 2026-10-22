@@ -1,9 +1,33 @@
 ﻿@inherits LayoutComponentBase
+@using MyHotels.Shared.Data.Services
+@inject CartState Cart
+@implements IDisposable
 
-@Body
+<div class="mh-shell">
+    <header class="mh-topbar">
+        <a class="mh-logo" href="">MyHotels</a>
+        <nav>
+            <a href="">Oferta</a>
+            <a href="carrinho">Carrinho (@Cart.Items.Sum(x => x.Quantity))</a>
+            <a href="minhas-reservas">Reservas</a>
+            <a href="conta/login">Conta</a>
+            <a href="conta/logout">Sair</a>
+            <a href="conta/login">Conta</a>
+        </nav>
+    </header>
+    <main>
+        @Body
+    </main>
+</div>
 
 <div id="blazor-error-ui">
-    An unhandled error has occurred.
-    <a href="" class="reload">Reload</a>
+    Ocorreu um erro inesperado.
+    <a href="" class="reload">Recarregar</a>
     <a class="dismiss">🗙</a>
 </div>
+
+@code {
+    protected override void OnInitialized() => Cart.Changed += OnChanged;
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Cart.Changed -= OnChanged;
+}

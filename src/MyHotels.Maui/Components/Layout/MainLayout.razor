@@ -1,0 +1,26 @@
+﻿@inherits LayoutComponentBase
+@using MyHotels.Shared.Data.Services
+@inject CartState Cart
+@implements IDisposable
+
+<div class="mh-shell">
+    <header class="mh-topbar">
+        <a class="mh-logo" href="">MyHotels</a>
+        <nav>
+            <a href="">Oferta</a>
+            <a href="carrinho">Carrinho (@Cart.Items.Sum(x => x.Quantity))</a>
+            <a href="minhas-reservas">Reservas</a>
+            <a href="conta/login">Conta</a>
+            <a href="conta/logout">Sair</a>
+        </nav>
+    </header>
+    <main>
+        @Body
+    </main>
+</div>
+
+@code {
+    protected override void OnInitialized() => Cart.Changed += OnChanged;
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Cart.Changed -= OnChanged;
+}

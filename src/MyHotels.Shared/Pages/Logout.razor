@@ -1,0 +1,13 @@
+@page "/conta/logout"
+@inject ITokenStore TokenStore
+@inject NavigationManager Navigation
+
+<p>A terminar sessão...</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await TokenStore.ClearAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

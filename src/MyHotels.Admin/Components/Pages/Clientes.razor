@@ -1,0 +1,89 @@
+@page "/clientes"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Identity
+@using MyHotels.Infrastructure.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Clientes</PageTitle>
+<h1>Gestão de clientes</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Email</th>
+            <th>Estado conta</th>
+            <th>Estado cliente</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in _clients)
+        {
+            <tr>
+                <td>@(user.DisplayName ?? $"{user.FirstName} {user.LastName}")</td>
+                <td>@user.Email</td>
+                <td>@(user.IsActive ? "Ativo" : "Inativo")</td>
+                <td>@user.CustomerStatus</td>
+                <td class="actions">
+                    <button class="btn" @onclick="() => ToggleActiveAsync(user)">@(user.IsActive ? "Inativar" : "Ativar")</button>
+                    <button class="btn" @onclick="() => ToggleCustomerStatusAsync(user)">
+                        @(user.CustomerStatus == CustomerStatus.Pending ? "Ativar cliente" : "Tornar pendente")
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ApplicationUser> _clients = [];
+    private string? _message;
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = UserManager.GetUserId(auth.User);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var users = await UserManager.GetUsersInRoleAsync(AppRoles.Cliente);
+        _clients = users.OrderBy(x => x.Email).ToList();
+    }
+
+    private async Task ToggleActiveAsync(ApplicationUser user)
+    {
+        if (user.Id == _currentUserId)
+        {
+            _message = "Não pode desativar o seu próprio registo.";
+            return;
+        }
+
+        user.IsActive = !user.IsActive;
+        await UserManager.UpdateAsync(user);
+        _message = "Estado da conta atualizado.";
+        await ReloadAsync();
+    }
+
+    private async Task ToggleCustomerStatusAsync(ApplicationUser user)
+    {
+        user.CustomerStatus = user.CustomerStatus == CustomerStatus.Pending
+            ? CustomerStatus.Active
+            : CustomerStatus.Pending;
+        await UserManager.UpdateAsync(user);
+        _message = "Estado de cliente atualizado.";
+        await ReloadAsync();
+    }
+}

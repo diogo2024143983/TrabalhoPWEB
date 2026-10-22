@@ -1,0 +1,297 @@
+@page "/alojamentos"
+@attribute [Authorize(Policy = "Staff")]
+@using Microsoft.EntityFrameworkCore
+@using MyHotels.Domain.Entities
+@using MyHotels.Infrastructure
+@using MyHotels.Infrastructure.Data
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>Alojamentos</PageTitle>
+<h1>Alojamentos (produtos)</h1>
+
+<div class="toolbar">
+    <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
+    <select @bind="_filterHotelId">
+        <option value="0">Todos os hotéis</option>
+        @foreach (var hotel in _hotels)
+        {
+            <option value="@hotel.Id">@hotel.Name</option>
+        }
+    </select>
+    <select @bind="_filterCategoryId">
+        <option value="0">Todas as categorias</option>
+        @foreach (var category in _categories)
+        {
+            <option value="@category.Id">@category.Name</option>
+        }
+    </select>
+    <button class="btn btn-primary" @onclick="StartCreate">Novo alojamento</button>
+</div>
+
+@if (_editing is not null)
+{
+    <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="alojamento-form">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Hotel</label>
+                <InputSelect @bind-Value="_editing.HotelId" class="form-control">
+                    @foreach (var hotel in _hotels)
+                    {
+                        <option value="@hotel.Id">@hotel.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="form-group">
+                <label>Categoria</label>
+                <InputSelect @bind-Value="_editing.CategoryId" class="form-control">
+                    @foreach (var category in _categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="form-group">
+                <label>Modo</label>
+                <InputSelect @bind-Value="_editing.AvailabilityModeId" class="form-control">
+                    @foreach (var mode in _modes)
+                    {
+                        <option value="@mode.Id">@mode.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="form-group">
+                <label>Nome</label>
+                <InputText @bind-Value="_editing.Name" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Capacidade</label>
+                <InputNumber @bind-Value="_editing.Capacity" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Stock</label>
+                <InputNumber @bind-Value="_editing.Stock" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Preço base</label>
+                <InputNumber @bind-Value="_editing.BasePrice" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Markup %</label>
+                <InputNumber @bind-Value="_markupPercent" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Preço final</label>
+                <InputNumber @bind-Value="_editing.FinalPrice" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label>Imagem</label>
+                <InputText @bind-Value="_editing.ImagePath" class="form-control" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Descrição</label>
+            <InputTextArea @bind-Value="_editing.Description" class="form-control" />
+        </div>
+        <div class="toolbar">
+            <label><InputCheckbox @bind-Value="_editing.IsListed" /> Listagem</label>
+            <label><InputCheckbox @bind-Value="_editing.IsAvailableForBooking" /> Disponível para reserva</label>
+            <label><InputCheckbox @bind-Value="_editing.IsActive" /> Ativo</label>
+            <button type="button" class="btn" @onclick="ApplyMarkup">Aplicar markup</button>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn" @onclick="() => _editing = null">Cancelar</button>
+        </div>
+    </EditForm>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Hotel</th>
+            <th>Categoria</th>
+            <th>Stock</th>
+            <th>Preço final</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Paged())
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Hotel?.Name</td>
+                <td>@item.Category?.Name</td>
+                <td>@item.Stock</td>
+                <td>@item.FinalPrice.ToString("C")</td>
+                <td>@(item.IsActive ? "Ativo" : "Inativo")</td>
+                <td class="actions">
+                    <button class="btn" @onclick="() => StartEdit(item)">Editar</button>
+                    <button class="btn" @onclick="() => ToggleActiveAsync(item)">@(item.IsActive ? "Inativar" : "Ativar")</button>
+                    <button class="btn btn-danger" @onclick="() => DeleteAsync(item)">Apagar</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<div class="toolbar">
+    <button class="btn" disabled="@(_page == 0)" @onclick="PreviousPage">Anterior</button>
+    <span>Página @(_page + 1) de @TotalPages()</span>
+    <button class="btn" disabled="@(_page >= TotalPages() - 1)" @onclick="NextPage">Seguinte</button>
+</div>
+
+@code {
+    private List<Accommodation> _items = [];
+    private List<Hotel> _hotels = [];
+    private List<AccommodationCategory> _categories = [];
+    private List<AvailabilityMode> _modes = [];
+    private Accommodation? _editing;
+    private string _search = string.Empty;
+    private int _filterHotelId;
+    private int _filterCategoryId;
+    private decimal _markupPercent = AppConfig.DefaultMarkupPercent;
+    private int _page;
+    private const int PageSize = 10;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hotels = await Db.Hotels.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        _categories = await Db.AccommodationCategories.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        _modes = await Db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync() =>
+        _items = await Db.Accommodations
+            .AsNoTracking()
+            .Include(x => x.Hotel)
+            .Include(x => x.Category)
+            .Include(x => x.AvailabilityMode)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+    private IEnumerable<Accommodation> Filtered()
+    {
+        var query = _items.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            query = query.Where(x => x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (_filterHotelId > 0)
+        {
+            query = query.Where(x => x.HotelId == _filterHotelId);
+        }
+
+        if (_filterCategoryId > 0)
+        {
+            query = query.Where(x => x.CategoryId == _filterCategoryId);
+        }
+
+        return query;
+    }
+
+    private IEnumerable<Accommodation> Paged() =>
+        Filtered().Skip(_page * PageSize).Take(PageSize);
+
+    private int TotalPages() =>
+        Math.Max(1, (int)Math.Ceiling(Filtered().Count() / (double)PageSize));
+
+    private void PreviousPage() => _page = Math.Max(0, _page - 1);
+
+    private void NextPage() => _page = Math.Min(TotalPages() - 1, _page + 1);
+
+    private void StartCreate()
+    {
+        _editing = new Accommodation
+        {
+            Name = string.Empty,
+            HotelId = _hotels.FirstOrDefault()?.Id ?? 0,
+            CategoryId = _categories.FirstOrDefault()?.Id ?? 0,
+            AvailabilityModeId = _modes.FirstOrDefault()?.Id ?? 0,
+            Capacity = 2,
+            Stock = 1,
+            IsListed = true,
+            IsAvailableForBooking = true,
+            IsActive = true
+        };
+        ApplyMarkup();
+    }
+
+    private void StartEdit(Accommodation item)
+    {
+        _editing = new Accommodation
+        {
+            Id = item.Id,
+            HotelId = item.HotelId,
+            CategoryId = item.CategoryId,
+            AvailabilityModeId = item.AvailabilityModeId,
+            Name = item.Name,
+            Description = item.Description,
+            Capacity = item.Capacity,
+            Stock = item.Stock,
+            BasePrice = item.BasePrice,
+            FinalPrice = item.FinalPrice,
+            ImagePath = item.ImagePath,
+            IsListed = item.IsListed,
+            IsAvailableForBooking = item.IsAvailableForBooking,
+            IsActive = item.IsActive
+        };
+    }
+
+    private void ApplyMarkup()
+    {
+        if (_editing is null) return;
+        _editing.FinalPrice = Math.Round(_editing.BasePrice * (1 + _markupPercent / 100m), 2);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _message = "O nome é obrigatório.";
+            return;
+        }
+
+        if (_editing.Id == 0) Db.Accommodations.Add(_editing);
+        else Db.Accommodations.Update(_editing);
+
+        await Db.SaveChangesAsync();
+        _editing = null;
+        _message = "Alojamento guardado.";
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(Accommodation item)
+    {
+        var entity = await Db.Accommodations.FindAsync(item.Id);
+        if (entity is null) return;
+        entity.IsActive = !entity.IsActive;
+        await Db.SaveChangesAsync();
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(Accommodation item)
+    {
+        if (await Db.BookingItems.AnyAsync(x => x.AccommodationId == item.Id))
+        {
+            _message = "Não é possível apagar fisicamente: existem reservas associadas.";
+            return;
+        }
+
+        var entity = await Db.Accommodations.FindAsync(item.Id);
+        if (entity is null) return;
+        Db.Accommodations.Remove(entity);
+        await Db.SaveChangesAsync();
+        _message = "Alojamento apagado.";
+        await ReloadAsync();
+    }
+}

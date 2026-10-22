@@ -1,0 +1,133 @@
+@using MyHotels.Shared.Data.DTO
+@using MyHotels.Shared.Data.Interfaces
+@using MyHotels.Shared.Data.Services
+@inject ICatalogApi CatalogApi
+@inject CartState Cart
+@inject NavigationManager Navigation
+
+<section class="mh-hero">
+    <div class="mh-hero-copy">
+        <p class="mh-brand">MyHotels</p>
+        <h1>Alojamentos da nossa cadeia</h1>
+        <p>Explore hotéis, categorias e reserve online quando estiver disponível.</p>
+    </div>
+    @if (_featured is not null)
+    {
+        <aside class="mh-featured">
+            <span>Destaque</span>
+            <strong>@_featured.Name</strong>
+            <p>@_featured.HotelName · @_featured.City</p>
+            <p class="mh-price">@_featured.FinalPrice.ToString("C")</p>
+            <button class="mh-btn" @onclick="() => OpenDetails(_featured.Id)">Ver detalhes</button>
+        </aside>
+    }
+</section>
+
+<section class="mh-strip">
+    <div class="mh-strip-header">
+        <h2>Hotéis</h2>
+        <p>Selecione um hotel para filtrar os alojamentos.</p>
+    </div>
+    <div class="mh-rail">
+        <button class="mh-chip @(_selectedHotelId is null ? "active" : null)" @onclick="() => SelectHotel(null)">Todos</button>
+        @foreach (var hotel in _hotels)
+        {
+            <button class="mh-chip @(_selectedHotelId == hotel.Id ? "active" : null)" @onclick="() => SelectHotel(hotel.Id)">
+                <strong>@hotel.Name</strong>
+                <span>@hotel.City · @hotel.Stars★</span>
+            </button>
+        }
+    </div>
+</section>
+
+<section class="mh-strip">
+    <div class="mh-strip-header">
+        <h2>Categorias</h2>
+        <p>Segundo friso para refinar por tipo de alojamento.</p>
+    </div>
+    <div class="mh-rail">
+        <button class="mh-chip @(_selectedCategoryId is null ? "active" : null)" @onclick="() => SelectCategory(null)">Todas</button>
+        @foreach (var category in _categories)
+        {
+            <button class="mh-chip @(_selectedCategoryId == category.Id ? "active" : null)" @onclick="() => SelectCategory(category.Id)">
+                @category.Name
+            </button>
+        }
+    </div>
+</section>
+
+<section class="mh-strip">
+    <div class="mh-strip-header">
+        <h2>Alojamentos</h2>
+        <p>Terceiro friso com a oferta filtrada.</p>
+    </div>
+    <div class="mh-rail mh-products">
+        @foreach (var item in _accommodations)
+        {
+            <article class="mh-card">
+                <div class="mh-card-body">
+                    <h3>@item.Name</h3>
+                    <p>@item.HotelName · @item.CategoryName</p>
+                    <p class="mh-price">@item.FinalPrice.ToString("C") / noite</p>
+                    <p>@(item.IsAvailableForBooking ? $"Disponível · stock {item.Stock}" : "Apenas listagem")</p>
+                    <div class="mh-card-actions">
+                        <button class="mh-btn" @onclick="() => OpenDetails(item.Id)">Detalhes</button>
+                        @if (item.IsAvailableForBooking)
+                        {
+                            <button class="mh-btn secondary" @onclick="() => Cart.Add(item)">Adicionar</button>
+                        }
+                    </div>
+                </div>
+            </article>
+        }
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <p class="mh-error">@_error</p>
+}
+
+@code {
+    private IReadOnlyList<HotelDto> _hotels = [];
+    private IReadOnlyList<CategoryDto> _categories = [];
+    private IReadOnlyList<AccommodationDto> _accommodations = [];
+    private FeaturedAccommodationDto? _featured;
+    private int? _selectedHotelId;
+    private int? _selectedCategoryId;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _hotels = await CatalogApi.GetHotelsAsync();
+            _categories = await CatalogApi.GetCategoriesAsync();
+            _featured = await CatalogApi.GetFeaturedAsync();
+            await ReloadAccommodationsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Não foi possível contactar a API: {ex.Message}";
+        }
+    }
+
+    private async Task SelectHotel(int? hotelId)
+    {
+        _selectedHotelId = hotelId;
+        await ReloadAccommodationsAsync();
+    }
+
+    private async Task SelectCategory(int? categoryId)
+    {
+        _selectedCategoryId = categoryId;
+        await ReloadAccommodationsAsync();
+    }
+
+    private async Task ReloadAccommodationsAsync()
+    {
+        _accommodations = await CatalogApi.GetAccommodationsAsync(_selectedHotelId, _selectedCategoryId);
+    }
+
+    private void OpenDetails(int id) => Navigation.NavigateTo($"/alojamento/{id}");
+}

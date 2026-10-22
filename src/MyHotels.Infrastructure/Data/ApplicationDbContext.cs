@@ -52,5 +52,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .WithMany(item => item.Items)
             .HasForeignKey(item => item.BookingId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<Booking>()
+            .Property(item => item.StockUpdated)
+            .HasDefaultValue(false);
+        builder.Entity<Booking>()
+            .Property(item => item.DocumentsExpedited)
+            .HasDefaultValue(false);
+        builder.Entity<BookingItem>()
+            .HasOne(item => item.Accommodation)
+            .WithMany(item => item.BookingItems)
+            .HasForeignKey(item => item.AccommodationId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
