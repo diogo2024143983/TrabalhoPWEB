@@ -1,0 +1,150 @@
+@page "/funcionarios"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using MyHotels.Domain.Identity
+@using MyHotels.Infrastructure.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Funcionários</PageTitle>
+<h1>Gestão de funcionários</h1>
+
+<EditForm Model="_createModel" OnValidSubmit="CreateAsync" FormName="create-staff">
+    <DataAnnotationsValidator />
+    <div class="form-grid">
+        <div class="form-group">
+            <label>Email</label>
+            <InputText @bind-Value="_createModel.Email" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Nome</label>
+            <InputText @bind-Value="_createModel.DisplayName" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <InputText type="password" @bind-Value="_createModel.Password" class="form-control" />
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Criar funcionário</button>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p class="info">@_message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Email</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in _staff)
+        {
+            <tr>
+                <td>@user.DisplayName</td>
+                <td>@user.Email</td>
+                <td>@(user.IsActive ? "Ativo" : "Inativo")</td>
+                <td class="actions">
+                    <button class="btn" disabled="@(user.Id == _currentUserId)" @onclick="() => ToggleActiveAsync(user)">
+                        @(user.IsActive ? "Inativar" : "Ativar")
+                    </button>
+                    <button class="btn btn-danger" disabled="@(user.Id == _currentUserId)" @onclick="() => RemoveRoleAsync(user)">
+                        Remover perfil
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ApplicationUser> _staff = [];
+    private readonly CreateStaffModel _createModel = new();
+    private string? _message;
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = UserManager.GetUserId(auth.User);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var users = await UserManager.GetUsersInRoleAsync(AppRoles.Funcionario);
+        _staff = users.OrderBy(x => x.Email).ToList();
+    }
+
+    private async Task CreateAsync()
+    {
+        var user = new ApplicationUser
+        {
+            UserName = _createModel.Email,
+            Email = _createModel.Email,
+            EmailConfirmed = true,
+            DisplayName = _createModel.DisplayName,
+            IsActive = true,
+            CustomerStatus = CustomerStatus.Active
+        };
+
+        var result = await UserManager.CreateAsync(user, _createModel.Password);
+        if (!result.Succeeded)
+        {
+            _message = string.Join("; ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await UserManager.AddToRoleAsync(user, AppRoles.Funcionario);
+        _message = "Funcionário criado.";
+        _createModel.Email = string.Empty;
+        _createModel.DisplayName = string.Empty;
+        _createModel.Password = string.Empty;
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(ApplicationUser user)
+    {
+        if (user.Id == _currentUserId)
+        {
+            _message = "Não pode desativar o seu próprio registo.";
+            return;
+        }
+
+        user.IsActive = !user.IsActive;
+        await UserManager.UpdateAsync(user);
+        await ReloadAsync();
+    }
+
+    private async Task RemoveRoleAsync(ApplicationUser user)
+    {
+        if (user.Id == _currentUserId)
+        {
+            _message = "Não pode remover o seu próprio perfil.";
+            return;
+        }
+
+        await UserManager.RemoveFromRoleAsync(user, AppRoles.Funcionario);
+        _message = "Perfil de funcionário removido.";
+        await ReloadAsync();
+    }
+
+    private sealed class CreateStaffModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required, MinLength(8)]
+        public string Password { get; set; } = string.Empty;
+    }
+}
