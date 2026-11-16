@@ -52,15 +52,7 @@ public static class Inicializacao
             isActive: true,
             firstName: "Ana",
             lastName: "Cliente",
-            nif: "123456789");
-        await EnsureUserAsync(
-            userManager,
-            AppConfig.FornecedorEmail,
-            AppConfig.FornecedorPassword,
-            "Fornecedor Demonstração",
-            AppRoles.Fornecedor,
-            CustomerStatus.Active,
-            isActive: true);
+            nif: 123456789L);
 
         if (await db.Hotels.AnyAsync())
         {
@@ -197,7 +189,7 @@ public static class Inicializacao
         bool isActive,
         string? firstName = null,
         string? lastName = null,
-        string? nif = null)
+        long? nif = null)
     {
         var user = await userManager.FindByEmailAsync(email);
         if (user is null)

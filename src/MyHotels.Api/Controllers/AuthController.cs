@@ -65,7 +65,7 @@ public sealed class AuthController(
             FirstName = request.FirstName,
             LastName = request.LastName,
             DisplayName = $"{request.FirstName} {request.LastName}".Trim(),
-            Nif = request.Nif,
+            Nif = long.TryParse(request.Nif, out var nifVal) ? nifVal : null,
             Address = request.Address,
             IsActive = true,
             CustomerStatus = CustomerStatus.Pending
