@@ -5,7 +5,9 @@ using MyHotels.Admin.Components;
 using MyHotels.Domain.Identity;
 using MyHotels.Infrastructure;
 using MyHotels.Infrastructure.Data;
-using MyHotels.Infrastructure.Identity;
+using MyHotels.Admin.Interfaces;
+using MyHotels.Admin.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +17,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IMensagensService, MensagensService>();
 
 builder.Services.AddAuthentication(options =>
     {
@@ -37,6 +40,7 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(AppRoles.Administrador));
 });
 
+builder.Services.AddSingleton<IImagensService, ImagensServices>();
 var app = builder.Build();
 
 await Inicializacao.InicializarAsync(app.Services);

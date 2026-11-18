@@ -1,0 +1,40 @@
+﻿@inject IMensagensService Mensagens
+
+@if (_mensagem is not null)
+{
+    <div style="@EstiloCaixa(_mensagem.Sucesso)" role="alert">
+        <span>@_mensagem.Texto</span>
+        <button type="button"
+                @onclick="Fechar"
+                aria-label="Fechar"
+                style="background: transparent; border: none; font-size: 1.1rem; font-weight: bold; cursor: pointer; color: inherit;">
+            ×
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string? Erro { get; set; }
+
+    private Mensagem? _mensagem;
+
+    protected override void OnInitialized()
+    {
+        _mensagem = Mensagens.Retira();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(Erro))
+        {
+            _mensagem = new Mensagem(Erro, false);
+        }
+    }
+
+    private void Fechar() => _mensagem = null;
+
+    private static string EstiloCaixa(bool sucesso) => sucesso
+        ? "display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 0.35rem; background-color: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;"
+        : "display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 0.35rem; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;";
+}

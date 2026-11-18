@@ -4,8 +4,9 @@
 @using MyHotels.Domain.Entities
 @using MyHotels.Infrastructure
 @using MyHotels.Infrastructure.Data
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @rendermode InteractiveServer
+@inject IImagensService Imagens
 
 <PageTitle>Alojamentos</PageTitle>
 <h1>Alojamentos (produtos)</h1>
@@ -32,6 +33,9 @@
 @if (_editing is not null)
 {
     <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="alojamento-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
         <div class="form-grid">
             <div class="form-group">
                 <label>Hotel</label>
@@ -85,8 +89,11 @@
                 <InputNumber @bind-Value="_editing.FinalPrice" class="form-control" />
             </div>
             <div class="form-group">
-                <label>Imagem</label>
-                <InputText @bind-Value="_editing.ImagePath" class="form-control" />
+                <label>Fotografia (.png, .jpg, máx. 500 KB)</label>
+                <InputFile OnChange="CarregarImagemAsync" accept=".png,.jpg,.jpeg" class="form-control" />
+                <img src="@Imagens.Src(_editing.Image, _editing.ImagePath)"
+                     alt="Pré-visualização"
+                     style="max-height: 80px; margin-top: 8px; border-radius: 4px; border: 1px solid #ddd;" />
             </div>
         </div>
         <div class="form-group">
@@ -112,6 +119,7 @@
 <table class="table">
     <thead>
         <tr>
+            <th>Foto</th>
             <th>Nome</th>
             <th>Hotel</th>
             <th>Categoria</th>
@@ -125,6 +133,11 @@
         @foreach (var item in Paged())
         {
             <tr>
+                <td>
+                    <img src="@Imagens.Src(item.Image, item.ImagePath)"
+                         alt="@item.Name"
+                         style="width: 64px; height: 48px; object-fit: cover; border-radius: 4px;" />
+                </td>
                 <td>@item.Name</td>
                 <td>@item.Hotel?.Name</td>
                 <td>@item.Category?.Name</td>
@@ -163,20 +176,24 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _hotels = await Db.Hotels.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-        _categories = await Db.AccommodationCategories.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-        _modes = await Db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _hotels = await db.Hotels.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        _categories = await db.AccommodationCategories.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        _modes = await db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
         await ReloadAsync();
     }
 
-    private async Task ReloadAsync() =>
-        _items = await Db.Accommodations
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _items = await db.Accommodations
             .AsNoTracking()
             .Include(x => x.Hotel)
             .Include(x => x.Category)
             .Include(x => x.AvailabilityMode)
             .OrderBy(x => x.Name)
             .ToListAsync();
+    }
 
     private IEnumerable<Accommodation> Filtered()
     {
@@ -211,6 +228,7 @@
 
     private void StartCreate()
     {
+        _message = null;
         _editing = new Accommodation
         {
             Name = string.Empty,
@@ -228,6 +246,7 @@
 
     private void StartEdit(Accommodation item)
     {
+        _message = null;
         _editing = new Accommodation
         {
             Id = item.Id,
@@ -241,6 +260,7 @@
             BasePrice = item.BasePrice,
             FinalPrice = item.FinalPrice,
             ImagePath = item.ImagePath,
+            Image = item.Image,
             IsListed = item.IsListed,
             IsAvailableForBooking = item.IsAvailableForBooking,
             IsActive = item.IsActive
@@ -255,43 +275,73 @@
 
     private async Task SaveAsync()
     {
-        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
+        if (_editing is null) return;
+
+        try
         {
-            _message = "O nome é obrigatório.";
-            return;
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (_editing.Id == 0) db.Accommodations.Add(_editing);
+            else db.Accommodations.Update(_editing);
+
+            await db.SaveChangesAsync();
+            _editing = null;
+            _message = "Alojamento guardado com sucesso.";
+            await ReloadAsync();
         }
-
-        if (_editing.Id == 0) Db.Accommodations.Add(_editing);
-        else Db.Accommodations.Update(_editing);
-
-        await Db.SaveChangesAsync();
-        _editing = null;
-        _message = "Alojamento guardado.";
-        await ReloadAsync();
+        catch (DbUpdateException)
+        {
+            _message = "Não foi possível gravar na base de dados: verifica se os valores são válidos.";
+        }
     }
 
     private async Task ToggleActiveAsync(Accommodation item)
     {
-        var entity = await Db.Accommodations.FindAsync(item.Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Accommodations.FindAsync(item.Id);
         if (entity is null) return;
         entity.IsActive = !entity.IsActive;
-        await Db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         await ReloadAsync();
     }
 
     private async Task DeleteAsync(Accommodation item)
     {
-        if (await Db.BookingItems.AnyAsync(x => x.AccommodationId == item.Id))
+        try
         {
-            _message = "Não é possível apagar fisicamente: existem reservas associadas.";
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await db.BookingItems.AnyAsync(x => x.AccommodationId == item.Id))
+            {
+                _message = "Não é possível apagar fisicamente: existem reservas associadas.";
+                return;
+            }
+
+            var entity = await db.Accommodations.FindAsync(item.Id);
+            if (entity is null) return;
+            db.Accommodations.Remove(entity);
+            await db.SaveChangesAsync();
+            _message = "Alojamento apagado com sucesso.";
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            _message = "Não foi possível apagar o alojamento porque existem registos associados.";
+        }
+    }
+
+
+    private async Task CarregarImagemAsync(InputFileChangeEventArgs e)
+    {
+        if (_editing is null) return;
+        var ficheiro = e.File;
+        var erro = Imagens.Valida(ficheiro.Name, ficheiro.Size);
+        if (erro is not null)
+        {
+            _message = erro;
             return;
         }
-
-        var entity = await Db.Accommodations.FindAsync(item.Id);
-        if (entity is null) return;
-        Db.Accommodations.Remove(entity);
-        await Db.SaveChangesAsync();
-        _message = "Alojamento apagado.";
-        await ReloadAsync();
+        _message = null;
+        await using var stream = ficheiro.OpenReadStream(Imagens.TamanhoMax);
+        _editing.Image = await Imagens.LerBytesAsync(stream);
+        _editing.ImagePath = ficheiro.Name;
     }
 }

@@ -16,7 +16,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString(AppConfig.ConnectionStringName)
             ?? throw new InvalidOperationException($"Connection string '{AppConfig.ConnectionStringName}' was not configured.");
 
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddDbContextFactory<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString));
 
         return services;

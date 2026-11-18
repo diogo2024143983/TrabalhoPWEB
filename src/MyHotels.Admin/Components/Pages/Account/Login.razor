@@ -39,7 +39,8 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
-    private readonly LoginModel _model = new();
+    [SupplyParameterFromForm]
+    private LoginModel _model { get; set; } = new();
     private string? _error;
 
     private async Task LoginAsync()
