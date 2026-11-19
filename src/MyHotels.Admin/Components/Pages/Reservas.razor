@@ -3,13 +3,17 @@
 @using Microsoft.EntityFrameworkCore
 @using MyHotels.Domain.Entities
 @using MyHotels.Infrastructure.Data
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IMensagensService Mensagens
 @rendermode InteractiveServer
 
 <PageTitle>Reservas</PageTitle>
 <h1>Gestão de reservas</h1>
 
+<Aviso />
+
 <div class="toolbar">
+    <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por cliente ou ID" />
     <select @bind="_statusFilter">
         <option value="">Todos os estados</option>
         @foreach (BookingStatus status in Enum.GetValues<BookingStatus>())
@@ -18,11 +22,6 @@
         }
     </select>
 </div>
-
-@if (!string.IsNullOrWhiteSpace(_message))
-{
-    <p class="info">@_message</p>
-}
 
 <table class="table">
     <thead>
@@ -42,7 +41,7 @@
         {
             <tr>
                 <td>@booking.Id</td>
-                <td>@booking.CustomerId</td>
+                <td>@GetCustomerLabel(booking.CustomerId)</td>
                 <td>@booking.CheckIn</td>
                 <td>@booking.CheckOut</td>
                 <td>@booking.Total.ToString("C")</td>
@@ -61,59 +60,112 @@
 
 @code {
     private List<Booking> _items = [];
+    private Dictionary<string, string> _customers = new();
     private string _statusFilter = string.Empty;
-    private string? _message;
+    private string _search = string.Empty;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
-    private async Task ReloadAsync() =>
-        _items = await Db.Bookings
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _customers = await db.Users
+            .AsNoTracking()
+            .ToDictionaryAsync(
+                u => u.Id,
+                u => string.IsNullOrWhiteSpace(u.DisplayName)
+                    ? (u.Email ?? u.Id)
+                    : $"{u.DisplayName} ({u.Email})");
+
+        _items = await db.Bookings
             .AsNoTracking()
             .Include(x => x.Items)
             .OrderByDescending(x => x.CreatedAtUtc)
             .ToListAsync();
+    }
+
+    private string GetCustomerLabel(string customerId) =>
+        _customers.TryGetValue(customerId, out var label) ? label : customerId;
 
     private IEnumerable<Booking> Filtered()
     {
-        if (string.IsNullOrWhiteSpace(_statusFilter) || !Enum.TryParse<BookingStatus>(_statusFilter, out var status))
+        var query = _items.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_statusFilter) && Enum.TryParse<BookingStatus>(_statusFilter, out var status))
         {
-            return _items;
+            query = query.Where(x => x.Status == status);
         }
 
-        return _items.Where(x => x.Status == status);
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            query = query.Where(x =>
+                x.Id.ToString().Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                GetCustomerLabel(x.CustomerId).Contains(_search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query;
     }
 
     private async Task UpdateStatusAsync(Booking booking, BookingStatus status)
     {
-        var entity = await Db.Bookings.Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == booking.Id);
-        if (entity is null) return;
-
-        var previousStatus = entity.Status;
-        entity.Status = status;
-        if (status == BookingStatus.Confirmed && previousStatus == BookingStatus.Pending && !entity.StockUpdated)
+        try
         {
-            foreach (var item in entity.Items)
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var entity = await db.Bookings.Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == booking.Id);
+            if (entity is null) return;
+
+            var previousStatus = entity.Status;
+            entity.Status = status;
+
+            if (status == BookingStatus.Confirmed && previousStatus == BookingStatus.Pending && !entity.StockUpdated)
             {
-                var accommodation = await Db.Accommodations.FindAsync(item.AccommodationId);
-                if (accommodation is null) continue;
-                accommodation.Stock = Math.Max(0, accommodation.Stock - item.Quantity);
+                foreach (var item in entity.Items)
+                {
+                    var accommodation = await db.Accommodations.FindAsync(item.AccommodationId);
+                    if (accommodation is null) continue;
+                    accommodation.Stock = Math.Max(0, accommodation.Stock - item.Quantity);
+                }
+
+                entity.StockUpdated = true;
+            }
+            else if (status is BookingStatus.Rejected or BookingStatus.Cancelled && entity.StockUpdated)
+            {
+                foreach (var item in entity.Items)
+                {
+                    var accommodation = await db.Accommodations.FindAsync(item.AccommodationId);
+                    if (accommodation is null) continue;
+                    accommodation.Stock += item.Quantity;
+                }
+
+                entity.StockUpdated = false;
             }
 
-            entity.StockUpdated = true;
+            await db.SaveChangesAsync();
+            Mensagens.Sucesso($"Reserva #{booking.Id} atualizada para {status}.");
+            await ReloadAsync();
         }
-
-        await Db.SaveChangesAsync();
-        _message = $"Reserva {booking.Id} atualizada para {status}.";
-        await ReloadAsync();
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro($"Não foi possível atualizar a reserva #{booking.Id}.");
+        }
     }
 
     private async Task ExpediteAsync(Booking booking)
     {
-        var entity = await Db.Bookings.FindAsync(booking.Id);
-        if (entity is null) return;
-        entity.DocumentsExpedited = true;
-        await Db.SaveChangesAsync();
-        _message = $"Documentos da reserva {booking.Id} marcados como expedidos (simulação).";
-        await ReloadAsync();
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var entity = await db.Bookings.FindAsync(booking.Id);
+            if (entity is null) return;
+            entity.DocumentsExpedited = true;
+            await db.SaveChangesAsync();
+            Mensagens.Sucesso($"Documentos da reserva #{booking.Id} marcados como expedidos (simulação).");
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro($"Não foi possível expedir os documentos da reserva #{booking.Id}.");
+        }
     }
 }

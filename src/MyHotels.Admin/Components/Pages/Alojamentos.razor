@@ -7,9 +7,11 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @rendermode InteractiveServer
 @inject IImagensService Imagens
+@inject IMensagensService Mensagens
 
 <PageTitle>Alojamentos</PageTitle>
 <h1>Alojamentos (produtos)</h1>
+<Aviso />
 
 <div class="toolbar">
     <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
@@ -111,10 +113,7 @@
     </EditForm>
 }
 
-@if (!string.IsNullOrWhiteSpace(_message))
-{
-    <p class="info">@_message</p>
-}
+
 
 <table class="table">
     <thead>
@@ -172,7 +171,6 @@
     private decimal _markupPercent = AppConfig.DefaultMarkupPercent;
     private int _page;
     private const int PageSize = 10;
-    private string? _message;
 
     protected override async Task OnInitializedAsync()
     {
@@ -228,7 +226,6 @@
 
     private void StartCreate()
     {
-        _message = null;
         _editing = new Accommodation
         {
             Name = string.Empty,
@@ -246,7 +243,6 @@
 
     private void StartEdit(Accommodation item)
     {
-        _message = null;
         _editing = new Accommodation
         {
             Id = item.Id,
@@ -285,12 +281,12 @@
 
             await db.SaveChangesAsync();
             _editing = null;
-            _message = "Alojamento guardado com sucesso.";
+            Mensagens.Sucesso("Alojamento guardado com sucesso.");
             await ReloadAsync();
         }
         catch (DbUpdateException)
         {
-            _message = "Não foi possível gravar na base de dados: verifica se os valores são válidos.";
+            Mensagens.Erro("Não foi possível gravar na base de dados: verifica se os valores são válidos.");
         }
     }
 
@@ -311,7 +307,7 @@
             await using var db = await DbFactory.CreateDbContextAsync();
             if (await db.BookingItems.AnyAsync(x => x.AccommodationId == item.Id))
             {
-                _message = "Não é possível apagar fisicamente: existem reservas associadas.";
+                Mensagens.Erro("Não é possível apagar fisicamente: existem reservas associadas.");
                 return;
             }
 
@@ -319,27 +315,27 @@
             if (entity is null) return;
             db.Accommodations.Remove(entity);
             await db.SaveChangesAsync();
-            _message = "Alojamento apagado com sucesso.";
+            Mensagens.Sucesso("Alojamento apagado com sucesso.");
             await ReloadAsync();
         }
         catch (DbUpdateException)
         {
-            _message = "Não foi possível apagar o alojamento porque existem registos associados.";
+            Mensagens.Erro("Não foi possível apagar o alojamento porque existem registos associados.");
         }
     }
-
 
     private async Task CarregarImagemAsync(InputFileChangeEventArgs e)
     {
         if (_editing is null) return;
+
         var ficheiro = e.File;
         var erro = Imagens.Valida(ficheiro.Name, ficheiro.Size);
         if (erro is not null)
         {
-            _message = erro;
+            Mensagens.Erro(erro);
             return;
         }
-        _message = null;
+
         await using var stream = ficheiro.OpenReadStream(Imagens.TamanhoMax);
         _editing.Image = await Imagens.LerBytesAsync(stream);
         _editing.ImagePath = ficheiro.Name;

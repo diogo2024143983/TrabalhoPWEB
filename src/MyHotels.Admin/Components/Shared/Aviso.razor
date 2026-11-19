@@ -26,7 +26,12 @@
 
     protected override void OnParametersSet()
     {
-        if (!string.IsNullOrWhiteSpace(Erro))
+        var pendente = Mensagens.Retira();
+        if (pendente is not null)
+        {
+            _mensagem = pendente;
+        }
+        else if (!string.IsNullOrWhiteSpace(Erro))
         {
             _mensagem = new Mensagem(Erro, false);
         }

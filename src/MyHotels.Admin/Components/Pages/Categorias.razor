@@ -3,11 +3,15 @@
 @using Microsoft.EntityFrameworkCore
 @using MyHotels.Domain.Entities
 @using MyHotels.Infrastructure.Data
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IImagensService Imagens
+@inject IMensagensService Mensagens
 @rendermode InteractiveServer
 
 <PageTitle>Categorias</PageTitle>
 <h1>Categorias de alojamento</h1>
+
+<Aviso />
 
 <div class="toolbar">
     <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
@@ -18,6 +22,8 @@
 {
     <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="categoria-form">
         <DataAnnotationsValidator />
+        <ValidationSummary />
+
         <div class="form-group">
             <label>Nome</label>
             <InputText @bind-Value="_editing.Name" class="form-control" />
@@ -25,6 +31,13 @@
         <div class="form-group">
             <label>Descrição</label>
             <InputTextArea @bind-Value="_editing.Description" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label>Fotografia (.png, .jpg, máx. 500 KB)</label>
+            <InputFile OnChange="CarregarImagemAsync" accept=".png,.jpg,.jpeg" class="form-control" />
+            <img src="@Imagens.Src(_editing.Image, _editing.ImagePath)"
+                 alt="Pré-visualização"
+                 style="max-height: 80px; margin-top: 8px; border-radius: 4px; border: 1px solid #ddd;" />
         </div>
         <label><InputCheckbox @bind-Value="_editing.IsActive" /> Ativa</label>
         <div class="toolbar">
@@ -34,14 +47,10 @@
     </EditForm>
 }
 
-@if (!string.IsNullOrWhiteSpace(_message))
-{
-    <p class="info">@_message</p>
-}
-
 <table class="table">
     <thead>
         <tr>
+            <th>Foto</th>
             <th><button class="link-btn" @onclick='() => SortBy("name")'>Nome</button></th>
             <th>Descrição</th>
             <th>Estado</th>
@@ -52,6 +61,11 @@
         @foreach (var item in Filtered())
         {
             <tr>
+                <td>
+                    <img src="@Imagens.Src(item.Image, item.ImagePath)"
+                         alt="@item.Name"
+                         style="width: 64px; height: 48px; object-fit: cover; border-radius: 4px;" />
+                </td>
                 <td>@item.Name</td>
                 <td>@item.Description</td>
                 <td>@(item.IsActive ? "Ativa" : "Inativa")</td>
@@ -70,13 +84,16 @@
     private AccommodationCategory? _editing;
     private string _search = string.Empty;
     private string _sort = "name";
-    private string? _message;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
     {
-        _items = await Db.AccommodationCategories.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _items = await db.AccommodationCategories
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
 
     private IEnumerable<AccommodationCategory> Filtered()
@@ -97,7 +114,6 @@
     private void StartCreate()
     {
         _editing = new AccommodationCategory { Name = string.Empty, IsActive = true };
-        _message = null;
     }
 
     private void StartEdit(AccommodationCategory item)
@@ -107,59 +123,90 @@
             Id = item.Id,
             Name = item.Name,
             Description = item.Description,
+            ImagePath = item.ImagePath,
+            Image = item.Image,
             IsActive = item.IsActive
         };
-        _message = null;
     }
 
     private void CancelEdit() => _editing = null;
 
-    private async Task SaveAsync()
+    private async Task CarregarImagemAsync(InputFileChangeEventArgs e)
     {
-        if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
+        if (_editing is null) return;
+
+        var ficheiro = e.File;
+        var erro = Imagens.Valida(ficheiro.Name, ficheiro.Size);
+        if (erro is not null)
         {
-            _message = "O nome é obrigatório.";
+            Mensagens.Erro(erro);
             return;
         }
 
-        if (_editing.Id == 0)
-        {
-            Db.AccommodationCategories.Add(_editing);
-        }
-        else
-        {
-            Db.AccommodationCategories.Update(_editing);
-        }
+        await using var stream = ficheiro.OpenReadStream(Imagens.TamanhoMax);
+        _editing.Image = await Imagens.LerBytesAsync(stream);
+        _editing.ImagePath = ficheiro.Name;
+    }
 
-        await Db.SaveChangesAsync();
-        _editing = null;
-        _message = "Categoria guardada.";
-        await ReloadAsync();
+    private async Task SaveAsync()
+    {
+        if (_editing is null) return;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (_editing.Id == 0)
+            {
+                db.AccommodationCategories.Add(_editing);
+            }
+            else
+            {
+                db.AccommodationCategories.Update(_editing);
+            }
+
+            await db.SaveChangesAsync();
+            _editing = null;
+            Mensagens.Sucesso("Categoria guardada com sucesso.");
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro("Não foi possível gravar a categoria: verifica se já existe uma categoria com esse nome.");
+        }
     }
 
     private async Task ToggleActiveAsync(AccommodationCategory item)
     {
-        var entity = await Db.AccommodationCategories.FindAsync(item.Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.AccommodationCategories.FindAsync(item.Id);
         if (entity is null) return;
         entity.IsActive = !entity.IsActive;
-        await Db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         await ReloadAsync();
     }
 
     private async Task DeleteAsync(AccommodationCategory item)
     {
-        var inUse = await Db.Accommodations.AnyAsync(x => x.CategoryId == item.Id);
-        if (inUse)
+        try
         {
-            _message = "Não é possível apagar: existem alojamentos associados.";
-            return;
-        }
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var inUse = await db.Accommodations.AnyAsync(x => x.CategoryId == item.Id);
+            if (inUse)
+            {
+                Mensagens.Erro("Não é possível apagar: existem alojamentos associados a esta categoria.");
+                return;
+            }
 
-        var entity = await Db.AccommodationCategories.FindAsync(item.Id);
-        if (entity is null) return;
-        Db.AccommodationCategories.Remove(entity);
-        await Db.SaveChangesAsync();
-        _message = "Categoria apagada.";
-        await ReloadAsync();
+            var entity = await db.AccommodationCategories.FindAsync(item.Id);
+            if (entity is null) return;
+            db.AccommodationCategories.Remove(entity);
+            await db.SaveChangesAsync();
+            Mensagens.Sucesso("Categoria apagada com sucesso.");
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro("Não foi possível apagar a categoria porque existem registos associados.");
+        }
     }
 }

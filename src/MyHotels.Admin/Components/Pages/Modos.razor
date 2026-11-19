@@ -3,11 +3,14 @@
 @using Microsoft.EntityFrameworkCore
 @using MyHotels.Domain.Entities
 @using MyHotels.Infrastructure.Data
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IMensagensService Mensagens
 @rendermode InteractiveServer
 
 <PageTitle>Modos de disponibilização</PageTitle>
 <h1>Modos de disponibilização</h1>
+
+<Aviso />
 
 <div class="toolbar">
     <input @bind="_search" @bind:event="oninput" placeholder="Filtrar por nome" />
@@ -17,6 +20,9 @@
 @if (_editing is not null)
 {
     <EditForm Model="_editing" OnValidSubmit="SaveAsync" FormName="modo-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
         <div class="form-group">
             <label>Nome</label>
             <InputText @bind-Value="_editing.Name" class="form-control" />
@@ -31,11 +37,6 @@
             <button type="button" class="btn" @onclick="() => _editing = null">Cancelar</button>
         </div>
     </EditForm>
-}
-
-@if (!string.IsNullOrWhiteSpace(_message))
-{
-    <p class="info">@_message</p>
 }
 
 <table class="table">
@@ -68,12 +69,14 @@
     private List<AvailabilityMode> _items = [];
     private AvailabilityMode? _editing;
     private string _search = string.Empty;
-    private string? _message;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
-    private async Task ReloadAsync() =>
-        _items = await Db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+    private async Task ReloadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _items = await db.AvailabilityModes.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+    }
 
     private IEnumerable<AvailabilityMode> Filtered() =>
         string.IsNullOrWhiteSpace(_search)
@@ -95,41 +98,58 @@
     {
         if (_editing is null || string.IsNullOrWhiteSpace(_editing.Name))
         {
-            _message = "O nome é obrigatório.";
+            Mensagens.Erro("O nome é obrigatório.");
             return;
         }
 
-        if (_editing.Id == 0) Db.AvailabilityModes.Add(_editing);
-        else Db.AvailabilityModes.Update(_editing);
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (_editing.Id == 0) db.AvailabilityModes.Add(_editing);
+            else db.AvailabilityModes.Update(_editing);
 
-        await Db.SaveChangesAsync();
-        _editing = null;
-        _message = "Modo guardado.";
-        await ReloadAsync();
+            await db.SaveChangesAsync();
+            _editing = null;
+            Mensagens.Sucesso("Modo guardado com sucesso.");
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro("Não foi possível gravar o modo: verifica se já existe um modo com esse nome.");
+        }
     }
 
     private async Task ToggleActiveAsync(AvailabilityMode item)
     {
-        var entity = await Db.AvailabilityModes.FindAsync(item.Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.AvailabilityModes.FindAsync(item.Id);
         if (entity is null) return;
         entity.IsActive = !entity.IsActive;
-        await Db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         await ReloadAsync();
     }
 
     private async Task DeleteAsync(AvailabilityMode item)
     {
-        if (await Db.Accommodations.AnyAsync(x => x.AvailabilityModeId == item.Id))
+        try
         {
-            _message = "Não é possível apagar: existem alojamentos associados.";
-            return;
-        }
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (await db.Accommodations.AnyAsync(x => x.AvailabilityModeId == item.Id))
+            {
+                Mensagens.Erro("Não é possível apagar: existem alojamentos associados a este modo.");
+                return;
+            }
 
-        var entity = await Db.AvailabilityModes.FindAsync(item.Id);
-        if (entity is null) return;
-        Db.AvailabilityModes.Remove(entity);
-        await Db.SaveChangesAsync();
-        _message = "Modo apagado.";
-        await ReloadAsync();
+            var entity = await db.AvailabilityModes.FindAsync(item.Id);
+            if (entity is null) return;
+            db.AvailabilityModes.Remove(entity);
+            await db.SaveChangesAsync();
+            Mensagens.Sucesso("Modo apagado com sucesso.");
+            await ReloadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Mensagens.Erro("Não foi possível apagar o modo porque existem registos associados.");
+        }
     }
 }
